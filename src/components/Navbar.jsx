@@ -2,9 +2,10 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Navbar, Nav, Container, Button, Modal } from "react-bootstrap";
+import Logo from "../assets/download-cropped-cropped.svg"; // <-- Add your SVG here
 
 const AppNavbar = () => {
-    const { isAuthenticated, user, logout, isAdmin } = useAuth();
+    const { isAuthenticated, logout, isAdmin } = useAuth();
     const navigate = useNavigate();
     const [showModal, setShowModal] = useState(false);
 
@@ -18,7 +19,13 @@ const AppNavbar = () => {
         <>
             <Navbar bg="light" variant="light" expand="lg">
                 <Container>
-                    <Navbar.Brand as={Link} to="/">
+                    <Navbar.Brand as={Link} to="/" className="d-flex align-items-center" style={{color : "#2a9d8f"}}>
+                        {/* SVG Logo */}
+                        <img 
+                            src={Logo} 
+                            alt="TurfTown Logo" 
+                            style={{ height: "40px", marginRight: "8px" }} // Adjust size here
+                        />
                         TurfTown
                     </Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
@@ -31,8 +38,6 @@ const AppNavbar = () => {
 
                             {isAuthenticated ? (
                                 <>
-                                    
-
                                     {!isAdmin && (
                                         <Nav.Link as={Link} to="/my-bookings">
                                             My Bookings
@@ -87,4 +92,3 @@ const AppNavbar = () => {
 };
 
 export default AppNavbar;
-

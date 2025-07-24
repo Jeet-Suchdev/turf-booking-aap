@@ -6,7 +6,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false); // Added loading state for better UX
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -15,17 +15,15 @@ const LoginPage = () => {
     setError("");
     setLoading(true);
     try {
-      // 1. The login function returns an object with the user's admin status
-      const { isAdmin } = await login(email, password);
+      const { isAdmin } = await login(email, password); // <-- now this works
 
-      // 2. Use the correct 'isAdmin' flag to navigate
       if (isAdmin) {
         navigate("/admin/dashboard");
       } else {
         navigate("/");
       }
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -45,18 +43,18 @@ const LoginPage = () => {
             required
           />
         </div>
-        
+
         <div>
           <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
           />
         </div>
         <button type="submit" disabled={loading}>
-          {loading ? 'Logging In...' : 'Login'}
+          {loading ? "Logging In..." : "Login"}
         </button>
       </form>
       <p style={{ textAlign: "center", marginTop: "1rem" }}>

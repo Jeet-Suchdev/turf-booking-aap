@@ -12,6 +12,8 @@ import AdminRoute from "./components/AdminRoute";
 import "./App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Footer from "./components/Footer"
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 function App() {
   return (
@@ -35,9 +37,11 @@ function App() {
           </Route>
         </Routes>
       </main>
+      <ToastContainer position="top-right" autoClose={2000} />
       <Footer />
     </>
   );
 }
+
 
 export default App;
