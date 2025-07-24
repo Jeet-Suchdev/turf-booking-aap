@@ -12,7 +12,6 @@ const Footer = () => {
   const randomSlogan = slogans[Math.floor(Math.random() * slogans.length)];
 
   const footerStyles = {
-    backgroundColor: "#f9f9f9",
     color: "#333",
     padding: "2rem 1rem 0",
     fontFamily: "Segoe UI, sans-serif",
@@ -54,7 +53,7 @@ const Footer = () => {
   const bottomStyles = {
     marginTop: "2rem",
     padding: "1rem",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    backgroundColor: "rgba(0, 0, 0, 0)",
     fontSize: "14px",
     textAlign: "center",
   };
@@ -111,7 +110,7 @@ const Footer = () => {
           onMouseOver={(e) => (e.target.style.color = "#007BFF")}
           onMouseOut={(e) => (e.target.style.color = "#000")}
         >
-          www.turfapp.com
+          www.turftown.com
         </a>
       </div>
     </footer>

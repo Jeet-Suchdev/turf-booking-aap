@@ -1,28 +1,33 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom"; // Import Link
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false); // Added loading state for better UX
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     try {
-      const user = await login(email, password);
-      // Check phone number after login
-      
-      if (user.role === "admin") {
+      // 1. The login function returns an object with the user's admin status
+      const { isAdmin } = await login(email, password);
+
+      // 2. Use the correct 'isAdmin' flag to navigate
+      if (isAdmin) {
         navigate("/admin/dashboard");
       } else {
         navigate("/");
       }
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,9 +55,10 @@ const LoginPage = () => {
             required
           />
         </div>
-        <button type="submit">Login</button>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Logging In...' : 'Login'}
+        </button>
       </form>
-      {/* Add this link to the registration page */}
       <p style={{ textAlign: "center", marginTop: "1rem" }}>
         Don't have an account? <Link to="/register">Sign Up</Link>
       </p>
