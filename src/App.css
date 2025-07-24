@@ -1,0 +1,61 @@
+/* src/App.css */
+/* Navbar */
+.navbar {
+  background-color: var(--white);
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.navbar-brand {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+.navbar-links a,
+.navbar-links button {
+  margin-left: 1.5rem;
+  text-decoration: none;
+  color: var(--text-color);
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.navbar-links a:hover,
+.navbar-links button:hover {
+  color: var(--primary-color);
+}
+
+/* Turf Grid */
+.turf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+/* Card */
+.card {
+  background: var(--white);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  transition: transform 0.2s;
+}
+.card:hover {
+  transform: translateY(-5px);
+}
+.card-content {
+  padding: 1.5rem;
+}
+.card-content h3 {
+  margin-top: 0;
+  color: var(--primary-color);
+}
+.card-content p {
+  margin-bottom: 0.5rem;
+}
