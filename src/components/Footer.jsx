@@ -16,6 +16,7 @@ const Footer = () => {
     padding: "2rem 1rem 0",
     fontFamily: "Segoe UI, sans-serif",
     borderTop: "1px solid #ccc",
+    marginTop: "2rem"
   };
 
   const containerStyles = {
