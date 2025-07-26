@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 
 turf_booking_app/.env
+.env
