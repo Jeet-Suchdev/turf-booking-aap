@@ -1,13 +1,15 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+// Import NavLink to handle active link styling
+import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Navbar, Nav, Container, Button, Modal } from "react-bootstrap";
-import Logo from "../assets/download-cropped-cropped.svg"; // <-- Add your SVG here
+import Logo from "../assets/download-cropped-cropped.svg";
 
 const AppNavbar = () => {
   const { isAuthenticated, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleLogoutConfirm = () => {
     logout();
@@ -15,58 +17,118 @@ const AppNavbar = () => {
     navigate("/");
   };
 
+  const handleLogoutClick = () => {
+    setExpanded(false);
+    setShowModal(true);
+  };
+
+  // Style objects for NavLinks
+  const navLinkStyle = {
+    fontWeight: "500",
+    color: "#495057",
+    margin: "0 0.5rem",
+  };
+
+  const activeLinkStyle = {
+    color: "#2a9d8f",
+    fontWeight: "700",
+  };
+
   return (
     <>
-      <Navbar bg="light" variant="light" expand="lg">
+      <Navbar
+        // Changed to white, added shadow and sticky top
+        bg="white"
+        expand="lg"
+        className="shadow-sm"
+        sticky="top"
+        expanded={expanded}
+        onToggle={() => setExpanded((prevExpanded) => !prevExpanded)}
+      >
         <Container>
           <Navbar.Brand
             as={Link}
             to="/"
             className="d-flex align-items-center"
-            style={{ color: "#2a9d8f" }}
+            style={{ color: "#2a9d8f", fontWeight: "bold" }}
+            onClick={() => setExpanded(false)}
           >
-            {/* SVG Logo */}
             <img
               src={Logo}
               alt="TurfTown Logo"
-              style={{ height: "40px", marginRight: "8px" }} // Adjust size here
+              style={{ height: "40px", marginRight: "10px" }}
             />
             TurfTown
           </Navbar.Brand>
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
-          <Navbar.Collapse id="basic-navbar-nav">
-            <Nav className="ms-auto align-items-center">
-              {/* Home button - always visible */}
-              <Nav.Link as={Link} to="/" className="me-2">
+          <Navbar.Collapse id="basic-navbar-nav" className="py-3 py-lg-0">
+            <Nav className="ms-auto align-items-center text-center">
+              {/* Using NavLink for active styling */}
+              <Nav.Link
+                as={NavLink}
+                to="/"
+                onClick={() => setExpanded(false)}
+                style={({ isActive }) =>
+                  isActive
+                    ? { ...navLinkStyle, ...activeLinkStyle }
+                    : navLinkStyle
+                }
+              >
                 Home
               </Nav.Link>
 
               {isAuthenticated ? (
                 <>
                   {!isAdmin && (
-                    <Nav.Link as={Link} to="/my-bookings">
+                    <Nav.Link
+                      as={NavLink}
+                      to="/my-bookings"
+                      onClick={() => setExpanded(false)}
+                      style={({ isActive }) =>
+                        isActive
+                          ? { ...navLinkStyle, ...activeLinkStyle }
+                          : navLinkStyle
+                      }
+                    >
                       My Bookings
                     </Nav.Link>
                   )}
 
                   {isAdmin && (
-                    <Nav.Link as={Link} to="/admin/dashboard">
+                    <Nav.Link
+                      as={NavLink}
+                      // Reverted this link as requested
+                      to="/admin/dashboard"
+                      onClick={() => setExpanded(false)}
+                      style={({ isActive }) =>
+                        isActive
+                          ? { ...navLinkStyle, ...activeLinkStyle }
+                          : navLinkStyle
+                      }
+                    >
                       Admin Dashboard
                     </Nav.Link>
                   )}
 
                   <Button
                     variant="outline-danger"
-                    onClick={() => setShowModal(true)}
-                    className="ms-3"
+                    onClick={handleLogoutClick}
+                    className="ms-lg-3 mt-3 mt-lg-0"
                   >
                     Logout
                   </Button>
                 </>
               ) : (
-                <Nav.Link as={Link} to="/login">
+                // Changed Login to a more prominent button
+                <Button
+                  as={Link}
+                  to="/login"
+                  onClick={() => setExpanded(false)}
+                  className="ms-lg-3 mt-3 mt-lg-0"
+                  style={{ backgroundColor: "#2a9d8f", borderColor: "#2a9d8f" }}
+                >
                   Login
-                </Nav.Link>
+                </Button>
               )}
             </Nav>
           </Navbar.Collapse>
