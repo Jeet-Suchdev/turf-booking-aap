@@ -428,9 +428,9 @@ const styles = {
     fontSize: "0.8rem",
   },
   choiceButtonActive: {
-    backgroundColor: "#16a34a",
+    backgroundColor: "#2a9d8f",
     color: "white",
-    borderColor: "#16a34a",
+    borderColor: "#2a9d8f",
   },
   fileInputLabel: {
     display: "flex",
