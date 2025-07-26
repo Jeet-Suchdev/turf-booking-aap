@@ -102,7 +102,6 @@ const TurfDetailsPage = () => {
           endTime: endTime.toISOString(),
           totalPrice: turf.pricePerHour,
           status: "pending",
-          // **Add the user's phone number here**
           userNumber: user?.prefs?.phone || "",
         }
       );
@@ -117,27 +116,47 @@ const TurfDetailsPage = () => {
   };
 
   const generateSlotsForDate = (date) => {
-    if (!turf) return [];
+    if (!turf || !turf.slotConfiguration) return [];
+
     const slots = [];
     const now = new Date();
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
 
-    for (let hour = turf.openingHour; hour < turf.closingHour; hour++) {
-      const slotTime = new Date(targetDate);
-      slotTime.setHours(hour, 0, 0, 0);
-      if (slotTime < now) continue;
+    const dayOfWeek = targetDate.getDay();
 
-      const isBooked = bookings.some((b) => {
-        if (b.status !== "approved") return false;
-        const bookingStartTime = new Date(b.startTime);
-        return (
-          bookingStartTime.toDateString() === targetDate.toDateString() &&
-          bookingStartTime.getHours() === hour
-        );
+    try {
+      const config = JSON.parse(turf.slotConfiguration);
+      if (!Array.isArray(config)) return [];
+
+      const dayConfig = config.find((c) => c.dayOfWeek === dayOfWeek);
+      if (!dayConfig || !Array.isArray(dayConfig.hours)) return [];
+
+      dayConfig.hours.forEach((hour) => {
+        // Ensure hour is a valid number between 0-23
+        if (typeof hour !== "number" || hour < 0 || hour > 23) return;
+
+        const slotTime = new Date(targetDate);
+        slotTime.setHours(hour, 0, 0, 0);
+
+        if (slotTime < now) return;
+
+        const isBooked = bookings.some((b) => {
+          if (b.status !== "approved") return false;
+          const bookingStartTime = new Date(b.startTime);
+          return (
+            bookingStartTime.toDateString() === targetDate.toDateString() &&
+            bookingStartTime.getHours() === hour
+          );
+        });
+
+        if (!isBooked) slots.push(slotTime.toISOString());
       });
-      if (!isBooked) slots.push(slotTime.toISOString());
+    } catch (err) {
+      console.error("Error parsing slot configuration:", err);
+      return [];
     }
+
     return slots;
   };
 
@@ -166,26 +185,59 @@ const TurfDetailsPage = () => {
   if (!turf) return <p>Turf not found.</p>;
 
   return (
-    <div className="card-content">
+    <div style={{ maxWidth: "800px", margin: "0 auto", padding: "1rem" }}>
       {/* Carousel */}
       {photoUrls.length > 0 && (
         <div style={{ position: "relative", marginBottom: 24 }}>
           <img
             src={photoUrls[carouselIndex]}
             alt={`Turf photo ${carouselIndex + 1}`}
-            style={{ width: "100%", height: 320, objectFit: "cover", borderRadius: 8 }}
+            style={{
+              width: "100%",
+              height: 320,
+              objectFit: "cover",
+              borderRadius: 8,
+            }}
           />
           {photoUrls.length > 1 && (
             <>
               <button
                 onClick={handlePrev}
-                style={{ position: "absolute", top: "50%", left: 8, transform: "translateY(-50%)", zIndex: 2 }}
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: 8,
+                  transform: "translateY(-50%)",
+                  zIndex: 2,
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "40px",
+                  height: "40px",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                }}
               >
                 &#8592;
               </button>
               <button
                 onClick={handleNext}
-                style={{ position: "absolute", top: "50%", right: 8, transform: "translateY(-50%)", zIndex: 2 }}
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  right: 8,
+                  transform: "translateY(-50%)",
+                  zIndex: 2,
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "40px",
+                  height: "40px",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                }}
               >
                 &#8594;
               </button>
@@ -208,71 +260,145 @@ const TurfDetailsPage = () => {
           </div>
         </div>
       )}
-      <h1>{turf.name}</h1>
-      <p>
+
+      <h1 style={{ marginBottom: "0.5rem" }}>{turf.name}</h1>
+      <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
         <strong>Location:</strong> {turf.location}
       </p>
-      <p>
+      <p style={{ fontSize: "1.1rem", marginBottom: "1.5rem" }}>
         <strong>Price:</strong> ₹{turf.pricePerHour}/hour
       </p>
-      <p>
-        <strong>Owner Contact:</strong> {turf.ownerPhone || "Not provided"}
-      </p>
 
-      <h3>Select a Date</h3>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          marginBottom: "1rem",
+          backgroundColor: "#f8f9fa",
+          padding: "1.5rem",
+          borderRadius: "8px",
         }}
       >
-        <button
-          onClick={() => handleDateChange(-1)}
-          disabled={isToday(selectedDate)}
-        >
-          Previous Day
-        </button>
-        <strong>
-          {selectedDate.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}
-        </strong>
-        <button onClick={() => handleDateChange(1)}>Next Day</button>
-      </div>
+        <h3 style={{ marginTop: 0 }}>Book a Slot</h3>
 
-      <h4>Available Slots</h4>
-      <div>
-        {availableSlots.length > 0 ? (
-          availableSlots.map((slot) => (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h4 style={{ marginBottom: "0.5rem" }}>Select a Date</h4>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "1rem",
+              marginBottom: "1rem",
+            }}
+          >
             <button
-              key={slot}
-              className={selectedSlot === slot ? "" : "secondary"}
-              style={{ margin: "5px" }}
-              onClick={() => setSelectedSlot(slot)}
+              onClick={() => handleDateChange(-1)}
+              disabled={isToday(selectedDate)}
+              style={{
+                padding: "0.5rem 1rem",
+                backgroundColor: isToday(selectedDate) ? "#e5e7eb" : "#2a9d8f",
+                color: isToday(selectedDate) ? "#6b7280" : "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: isToday(selectedDate) ? "not-allowed" : "pointer",
+              }}
             >
-              {new Date(slot).toLocaleTimeString([], {
+              Previous Day
+            </button>
+            <strong style={{ fontSize: "1.1rem" }}>
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </strong>
+            <button
+              onClick={() => handleDateChange(1)}
+              style={{
+                padding: "0.5rem 1rem",
+                backgroundColor: "#2a9d8f",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+            >
+              Next Day
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h4 style={{ marginBottom: "0.5rem" }}>Available Slots</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {availableSlots.length > 0 ? (
+              availableSlots.map((slot) => {
+                const slotTime = new Date(slot);
+                const formattedTime = slotTime.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => setSelectedSlot(slot)}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      backgroundColor:
+                        selectedSlot === slot ? "#2a9d8f" : "#e5e7eb",
+                      color: selectedSlot === slot ? "white" : "#374151",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      minWidth: "100px",
+                    }}
+                  >
+                    {formattedTime}
+                  </button>
+                );
+              })
+            ) : (
+              <p>No available slots for this day.</p>
+            )}
+          </div>
+        </div>
+
+        {selectedSlot && (
+          <div style={{ marginTop: "1rem" }}>
+            <button
+              onClick={handleBooking}
+              style={{
+                padding: "0.75rem 1.5rem",
+                backgroundColor: "#2a9d8f",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                fontSize: "1rem",
+                fontWeight: "bold",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              Book{" "}
+              {new Date(selectedSlot).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
-              })}
+              })}{" "}
+              Slot
             </button>
-          ))
-        ) : (
-          <p>No available slots for this day.</p>
+          </div>
+        )}
+
+        {bookingStatus && (
+          <p
+            style={{
+              marginTop: "1rem",
+              color: bookingStatus.includes("failed") ? "#ef4444" : "#22c55e",
+              fontWeight: "500",
+            }}
+          >
+            {bookingStatus}
+          </p>
         )}
       </div>
-
-      {selectedSlot && (
-        <div style={{ marginTop: "1rem" }}>
-          <button onClick={handleBooking}>
-            Request Booking for {new Date(selectedSlot).toLocaleTimeString()}
-          </button>
-        </div>
-      )}
-      {bookingStatus && <p style={{ marginTop: "1rem" }}>{bookingStatus}</p>}
     </div>
   );
 };
