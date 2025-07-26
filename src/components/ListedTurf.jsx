@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import {
   databases,
   APPWRITE_DATABASE_ID,
@@ -9,6 +10,7 @@ import { Query } from "appwrite";
 
 const ListedTurfs = () => {
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [myTurfs, setMyTurfs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,6 +52,14 @@ const ListedTurfs = () => {
     }
   };
 
+  const handleViewTurf = (turfId) => {
+    navigate(`/turf/${turfId}`);
+  };
+
+  const handleUpdateTurf = (turfId) => {
+    navigate(`/update-turf/${turfId}`);
+  };
+
   return (
     <div style={styles.pageContainer}>
       <h2 style={styles.sectionTitle}>Your Listed Turfs</h2>
@@ -59,40 +69,38 @@ const ListedTurfs = () => {
       ) : myTurfs.length === 0 ? (
         <p style={styles.emptyStateText}>You have not listed any turfs yet.</p>
       ) : (
-        <div>
+        <div style={styles.turfsContainer}>
           {myTurfs.map((turf) => (
             <div key={turf.$id} style={styles.turfCard}>
-              <div>
-                <h4 style={{ margin: 0, color: "#2d3748", fontWeight: "600" }}>
-                  {turf.name}
-                </h4>
-                <p
-                  style={{
-                    margin: "0.5rem 0 0",
-                    color: "#718096",
-                    fontSize: "0.95rem",
-                  }}
-                >
+              <div style={styles.turfInfo}>
+                <h4 style={styles.turfName}>{turf.name}</h4>
+                <p style={styles.turfDetail}>
                   {turf.location} - ₹{turf.pricePerHour}/hour
                 </p>
-                <p
-                  style={{
-                    margin: "0.5rem 0 0",
-                    color: "#718096",
-                    fontSize: "0.95rem",
-                  }}
-                >
-                  Contact: {turf.ownerPhone}
-                </p>
+                <p style={styles.turfDetail}>Contact: {turf.ownerPhone}</p>
               </div>
-              {isAdmin && (
+              <div style={styles.buttonGroup}>
                 <button
-                  style={styles.delistButton}
-                  onClick={() => handleDelistTurf(turf.$id)}
+                  style={styles.viewButton}
+                  onClick={() => handleViewTurf(turf.$id)}
                 >
-                  Delist
+                  View
                 </button>
-              )}
+                <button
+                  style={styles.updateButton}
+                  onClick={() => handleUpdateTurf(turf.$id)}
+                >
+                  Update
+                </button>
+                {isAdmin && (
+                  <button
+                    style={styles.delistButton}
+                    onClick={() => handleDelistTurf(turf.$id)}
+                  >
+                    Delist
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -103,54 +111,125 @@ const ListedTurfs = () => {
 
 const styles = {
   pageContainer: {
-    padding: "2rem",
+    padding: "1rem",
     maxWidth: "800px",
     margin: "0 auto",
+    width: "100%",
+    boxSizing: "border-box",
   },
   sectionTitle: {
-    fontSize: "1.5rem",
-    fontWeight: "600",
-    marginBottom: "1.5rem",
-    color: "#2d3748",
+    marginBottom: "2rem",
     textAlign: "center",
   },
   errorText: {
     color: "#ef4444",
     textAlign: "center",
     marginBottom: "1rem",
+    fontSize: "0.9rem",
   },
   loadingText: {
     textAlign: "center",
     color: "#64748b",
+    fontSize: "0.9rem",
   },
   emptyStateText: {
     textAlign: "center",
     color: "#64748b",
     fontStyle: "italic",
+    fontSize: "0.9rem",
+  },
+  turfsContainer: {
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "justify",
+    gap: "1rem",
   },
   turfCard: {
     background: "white",
     borderRadius: "8px",
-    padding: "1.5rem",
-    marginBottom: "1rem",
+    padding: "1rem",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "column",
+    maxWidth: "1000px",
+    margin: "0 auto",
+    gap: "1rem",
+    "@media (min-width: 600px)": {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+  },
+  turfInfo: {
+    flex: 1,
+  },
+  turfName: {
+    margin: 0,
+    color: "#2d3748",
+    fontWeight: "600",
+    fontSize: "1.5rem",
+  },
+  turfDetail: {
+    margin: "0.5rem 0 0",
+    color: "#718096",
+    fontSize: "1rem",
+  },
+  buttonGroup: {
+    display: "flex",
+    gap: "0.8rem",
+    flexWrap: "wrap",
+    "@media (min-width: 600px)": {
+      flexWrap: "nowrap",
+    },
+  },
+  viewButton: {
+    background: "#3b82f6",
+    color: "white",
+    border: "none",
+    padding: "0.5rem",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: "500",
     transition: "all 0.2s ease",
+    fontSize: "0.8rem",
+    flex: 1,
+    maxWidth: "90px",
+    minWidth: "70px",
     "&:hover": {
-      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+      background: "#2563eb",
+    },
+  },
+  updateButton: {
+    background: "#10b981",
+    color: "white",
+    border: "none",
+    padding: "0.5rem",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "all 0.2s ease",
+    fontSize: "0.8rem",
+    flex: 1,
+    maxWidth: "90px",
+    minWidth: "70px",
+    "&:hover": {
+      background: "#059669",
     },
   },
   delistButton: {
     background: "#ef4444",
     color: "white",
     border: "none",
-    padding: "0.5rem 1rem",
+    padding: "0.5rem",
     borderRadius: "6px",
     cursor: "pointer",
     fontWeight: "500",
     transition: "all 0.2s ease",
+    fontSize: "0.8rem",
+    flex: 1,
+    maxWidth: "90px",
+    minWidth: "70px",
     "&:hover": {
       background: "#dc2626",
     },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   databases,
   storage,
@@ -8,14 +9,18 @@ import {
   TURFS_COLLECTION_ID,
   TURF_IMAGES_BUCKET_ID,
 } from "../services/appwrite";
-import { Permission, Role } from "appwrite";
+import { Permission, Role, Query } from "appwrite";
 
-const AddTurfs = () => {
+const UpdateTurf = () => {
+  const { id: turfId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [photos, setPhotos] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
+  const [existingPhotos, setExistingPhotos] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
+  const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -46,6 +51,55 @@ const AddTurfs = () => {
 
   const [selectedDays, setSelectedDays] = useState([]);
   const [selectedSlots, setSelectedSlots] = useState([]);
+  const [photosToDelete, setPhotosToDelete] = useState([]);
+
+  useEffect(() => {
+    const fetchTurfData = async () => {
+      try {
+        const turf = await databases.getDocument(
+          APPWRITE_DATABASE_ID,
+          TURFS_COLLECTION_ID,
+          turfId
+        );
+
+        // Verify the user owns this turf
+        if (turf.ownerId !== user?.$id) {
+          navigate("/");
+          return;
+        }
+
+        setFormData({
+          name: turf.name,
+          location: turf.location,
+          price: turf.pricePerHour.toString(),
+          phone: turf.ownerPhone,
+        });
+
+        // Parse slot configuration
+        const slotConfig = JSON.parse(turf.slotConfiguration || "[]");
+        const days = slotConfig.map((day) => day.dayOfWeek);
+        const slots = slotConfig.length > 0 ? slotConfig[0].hours : [];
+
+        setSelectedDays(days);
+        setSelectedSlots(slots);
+
+        // Handle existing photos
+        setExistingPhotos(turf.photoIds || []);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching turf:", error);
+        setMessage({
+          text: "Failed to load turf data. Please try again.",
+          type: "error",
+        });
+        navigate("/admin/dashboard");
+      }
+    };
+
+    if (user && turfId) {
+      fetchTurfData();
+    }
+  }, [user, turfId, navigate]);
 
   useEffect(() => {
     if (!photos.length) {
@@ -89,63 +143,66 @@ const AddTurfs = () => {
     }));
   };
 
+  const handleDeletePhoto = (photoId) => {
+    setPhotosToDelete((prev) => [...prev, photoId]);
+    setExistingPhotos((prev) => prev.filter((id) => id !== photoId));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage({ text: "", type: "" });
     setIsSubmitting(true);
 
-    if (photos.length === 0) {
-      setMessage({ text: "Please upload at least one photo.", type: "error" });
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
-      const uploadPromises = photos.map((file) =>
-        storage.createFile(TURF_IMAGES_BUCKET_ID, AppwriteID.unique(), file)
+      // Delete photos marked for removal
+      const deletePromises = photosToDelete.map((photoId) =>
+        storage.deleteFile(TURF_IMAGES_BUCKET_ID, photoId)
       );
-      const uploadResults = await Promise.all(uploadPromises);
-      const photoIds = uploadResults.map((res) => res.$id);
+      await Promise.all(deletePromises);
 
-      const newTurfData = {
+      // Upload new photos
+      let photoIds = [...existingPhotos];
+      if (photos.length > 0) {
+        const uploadPromises = photos.map((file) =>
+          storage.createFile(TURF_IMAGES_BUCKET_ID, AppwriteID.unique(), file)
+        );
+        const uploadResults = await Promise.all(uploadPromises);
+        photoIds = [...photoIds, ...uploadResults.map((res) => res.$id)];
+      }
+
+      // Update turf document
+      const updatedTurfData = {
         name: formData.name,
         location: formData.location,
         pricePerHour: Number(formData.price),
-        ownerId: user.$id,
         ownerPhone: formData.phone,
         photoIds,
         slotConfiguration: JSON.stringify(prepareSlotData()),
-        openingHour: 0,
-        closingHour: 23,
       };
 
-      await databases.createDocument(
+      await databases.updateDocument(
         APPWRITE_DATABASE_ID,
         TURFS_COLLECTION_ID,
-        AppwriteID.unique(),
-        newTurfData,
-        [
-          Permission.read(Role.any()),
-          Permission.update(Role.user(user.$id)),
-          Permission.delete(Role.user(user.$id)),
-        ]
+        turfId,
+        updatedTurfData
       );
 
-      setFormData({ name: "", location: "", price: "", phone: "" });
-      setPhotos([]);
-      setSelectedDays([]);
-      setSelectedSlots([]);
-      setMessage({ text: "✅ Turf added successfully!", type: "success" });
+      setMessage({ text: "✅ Turf updated successfully!", type: "success" });
+      setTimeout(() => navigate("/admin/dashboard"), 1500);
     } catch (err) {
-      console.error("Error adding turf:", err);
+      console.error("Error updating turf:", err);
       setMessage({
-        text: `❌ ${err.message || "Failed to add turf. Please try again."}`,
+        text: `❌ ${err.message || "Failed to update turf. Please try again."}`,
         type: "error",
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return <div style={styles.loadingContainer}>Loading turf data...</div>;
+  }
 
   const messageStyle = {
     ...styles.messageBox,
@@ -156,9 +213,9 @@ const AddTurfs = () => {
   return (
     <div style={styles.pageContainer}>
       <div style={styles.formContainer}>
-        <h2 style={styles.formTitle}>Add Your Turf</h2>
+        <h2 style={styles.formTitle}>Update Your Turf</h2>
         <p style={styles.formSubtitle}>
-          Fill in the details to get your turf listed.
+          Update the details of your turf listing.
         </p>
 
         {message.text && <p style={messageStyle}>{message.text}</p>}
@@ -269,13 +326,41 @@ const AddTurfs = () => {
           </div>
 
           <div style={styles.section}>
-            <h3 style={styles.sectionHeader}>Upload Photos</h3>
+            <h3 style={styles.sectionHeader}>Turf Photos</h3>
+            {existingPhotos.length > 0 && (
+              <div style={styles.existingPhotosContainer}>
+                <h4 style={styles.existingPhotosTitle}>Current Photos</h4>
+                <div style={styles.previewContainer}>
+                  {existingPhotos.map((photoId) => (
+                    <div key={photoId} style={styles.photoContainer}>
+                      <img
+                        src={storage.getFilePreview(
+                          TURF_IMAGES_BUCKET_ID,
+                          photoId
+                        )}
+                        alt={`Turf Preview`}
+                        style={styles.previewImage}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePhoto(photoId)}
+                        style={styles.deletePhotoButton}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={styles.inputGroup}>
               <label htmlFor="photo-upload" style={styles.fileInputLabel}>
                 <span style={styles.fileInputIcon}>📷</span>
-                <span>Click to Upload</span>
+                <span>Add More Photos</span>
                 <span style={styles.fileInputSubtext}>
-                  Add at least one photo
+                  {photos.length > 0
+                    ? `${photos.length} file(s) selected`
+                    : "Select new photos to upload"}
                 </span>
               </label>
               <input
@@ -286,11 +371,6 @@ const AddTurfs = () => {
                 onChange={handlePhotoChange}
                 style={{ display: "none" }}
               />
-              {photos.length > 0 && (
-                <p style={styles.fileInfoText}>
-                  {photos.length} file(s) selected.
-                </p>
-              )}
             </div>
 
             {photoPreviews.length > 0 && (
@@ -312,7 +392,7 @@ const AddTurfs = () => {
             style={styles.submitButton}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Adding Turf..." : "Add My Turf"}
+            {isSubmitting ? "Updating Turf..." : "Update Turf"}
           </button>
         </form>
       </div>
@@ -320,9 +400,15 @@ const AddTurfs = () => {
   );
 };
 
-// --- STYLES ---
-
+// Styles (similar to AddTurf with some additions)
 const styles = {
+  loadingContainer: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
+    fontSize: "1.2rem",
+  },
   pageContainer: {
     padding: "0.5rem",
     minHeight: "100vh",
@@ -392,19 +478,19 @@ const styles = {
     fontSize: "0.9rem",
   },
   input: {
-    width: "85%",
+    width: "100%",
     padding: "0.65rem 0.85rem",
     border: "1px solid #cbd5e1",
     borderRadius: "8px",
     fontSize: "1rem",
     backgroundColor: "#fff",
     transition: "border-color 0.2s, box-shadow 0.2s",
-    boxSizing: "border-box", // FIX: Prevents input from overflowing its container
+    boxSizing: "border-box",
   },
   daysContainer: {
-    display: "grid", // CHANGE: Use grid for fixed columns
-    gridTemplateColumns: "repeat(3, 1fr)", // CHANGE: Create 3 equal columns
-    gap: "0.5rem", // Adjusted gap for grid
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "0.5rem",
   },
   slotsContainer: {
     display: "grid",
@@ -422,15 +508,14 @@ const styles = {
     textAlign: "center",
     fontWeight: "500",
     fontSize: "0.85rem",
-    // flexGrow is not needed for grid, items will fill cell
   },
   slotButton: {
     fontSize: "0.8rem",
   },
   choiceButtonActive: {
-    backgroundColor: "#2a9d8f",
+    backgroundColor: "#16a34a",
     color: "white",
-    borderColor: "#2a9d8f",
+    borderColor: "#16a34a",
   },
   fileInputLabel: {
     display: "flex",
@@ -453,18 +538,22 @@ const styles = {
     fontSize: "0.8rem",
     color: "#94a3b8",
   },
-  fileInfoText: {
-    textAlign: "center",
-    color: "#475569",
-    marginTop: "0.75rem",
-    fontSize: "0.9rem",
-    fontWeight: "500",
+  existingPhotosContainer: {
+    marginBottom: "1.5rem",
+  },
+  existingPhotosTitle: {
+    fontSize: "0.95rem",
+    color: "#64748b",
+    marginBottom: "0.5rem",
   },
   previewContainer: {
     display: "flex",
     flexWrap: "wrap",
     gap: "0.5rem",
-    marginTop: "1.25rem",
+    marginTop: "0.5rem",
+  },
+  photoContainer: {
+    position: "relative",
   },
   previewImage: {
     width: "70px",
@@ -472,6 +561,23 @@ const styles = {
     borderRadius: "8px",
     objectFit: "cover",
     border: "2px solid #e2e8f0",
+  },
+  deletePhotoButton: {
+    position: "absolute",
+    top: "-8px",
+    right: "-8px",
+    background: "#ef4444",
+    color: "white",
+    border: "none",
+    borderRadius: "50%",
+    width: "24px",
+    height: "24px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "bold",
   },
   submitButton: {
     width: "100%",
@@ -488,4 +594,4 @@ const styles = {
   },
 };
 
-export default AddTurfs;
+export default UpdateTurf;
