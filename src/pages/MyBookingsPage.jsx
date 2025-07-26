@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { Modal, Button } from "react-bootstrap"; // 1. Import Modal and Button
 import {
   databases,
   APPWRITE_DATABASE_ID,
@@ -38,6 +39,10 @@ const MyBookingsPage = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // 2. Add state for the modal
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
+
   useEffect(() => {
     const fetchBookings = async () => {
       if (!user) {
@@ -49,7 +54,7 @@ const MyBookingsPage = () => {
         const response = await databases.listDocuments(
           APPWRITE_DATABASE_ID,
           BOOKINGS_COLLECTION_ID,
-          [Query.equal("userId", user.$id), Query.orderDesc("$createdAt")] // Order by most recent
+          [Query.equal("userId", user.$id), Query.orderDesc("$createdAt")]
         );
         setBookings(response.documents);
       } catch (error) {
@@ -62,45 +67,55 @@ const MyBookingsPage = () => {
     fetchBookings();
   }, [user]);
 
-  const handleCancel = async (bookingId) => {
-    if (window.confirm("Are you sure you want to cancel this booking?")) {
-      try {
-        await databases.updateDocument(
-          APPWRITE_DATABASE_ID,
-          BOOKINGS_COLLECTION_ID,
-          bookingId,
-          { status: "cancelled" } // Using lowercase for consistency
-        );
-        // Optimistic UI update for a smoother experience
-        setBookings((prevBookings) =>
-          prevBookings.map((b) =>
-            b.$id === bookingId ? { ...b, status: "cancelled" } : b
-          )
-        );
-      } catch (error) {
-        console.error("Failed to cancel booking:", error);
-        alert("Could not cancel the booking. Please try again.");
-      }
+  // 3. Function to open the modal
+  const handleCancelClick = (bookingId) => {
+    setBookingToCancel(bookingId);
+    setShowCancelModal(true);
+  };
+
+  // Function to close the modal
+  const handleCloseModal = () => {
+    setBookingToCancel(null);
+    setShowCancelModal(false);
+  };
+
+  // 4. Function to run when cancellation is confirmed
+  const handleConfirmCancel = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      await databases.updateDocument(
+        APPWRITE_DATABASE_ID,
+        BOOKINGS_COLLECTION_ID,
+        bookingToCancel,
+        { status: "cancelled" }
+      );
+      setBookings((prevBookings) =>
+        prevBookings.map((b) =>
+          b.$id === bookingToCancel ? { ...b, status: "cancelled" } : b
+        )
+      );
+    } catch (error) {
+      console.error("Failed to cancel booking:", error);
+      alert("Could not cancel the booking. Please try again.");
+    } finally {
+      // Close the modal after the action is complete
+      handleCloseModal();
     }
   };
 
-  if (loading) return <p>Loading your bookings...</p>;
-
-  // Card styles for a clean look
-  const cardStyle = {
-    background: "white",
-    borderRadius: "8px",
-    padding: "1.5rem",
-    marginBottom: "1rem",
-    boxShadow:
-      "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-  };
+  if (loading)
+    return (
+      <div style={styles.pageContainer}>
+        <p>Loading your bookings...</p>
+      </div>
+    );
 
   return (
-    <div>
-      <h1 style={{ marginBottom: "1.5rem" }}>My Bookings</h1>
+    <div style={styles.pageContainer}>
+      <h1 style={styles.pageTitle}>My Bookings</h1>
       {bookings.length === 0 ? (
-        <p>You have no bookings.</p>
+        <p style={styles.emptyText}>You have no bookings.</p>
       ) : (
         <div>
           {bookings.map((booking) => {
@@ -109,22 +124,13 @@ const MyBookingsPage = () => {
               booking.status === "pending" || booking.status === "approved";
 
             return (
-              <div key={booking.$id} style={cardStyle}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: "1.25rem" }}>
-                    {booking.turfName}
-                  </h3>
+              <div key={booking.$id} style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.turfName}>{booking.turfName}</h3>
                   <BookingStatusBadge status={booking.status} />
                 </div>
 
-                <div style={{ color: "#4b5563", fontSize: "0.9rem" }}>
+                <div style={styles.cardBody}>
                   <p>
                     <strong>🗓️ Date:</strong>{" "}
                     {bookingDate.toLocaleDateString("en-IN", {
@@ -148,20 +154,14 @@ const MyBookingsPage = () => {
                 </div>
 
                 {isCancellable && (
-                  <div
-                    style={{
-                      marginTop: "1.5rem",
-                      borderTop: "1px solid #e5e7eb",
-                      paddingTop: "1rem",
-                      textAlign: "right",
-                    }}
-                  >
-                    <button
-                      className="danger"
-                      onClick={() => handleCancel(booking.$id)}
+                  <div style={styles.cardFooter}>
+                    <Button
+                      variant="outline-danger"
+                      // 5. Trigger the modal instead of window.confirm
+                      onClick={() => handleCancelClick(booking.$id)}
                     >
                       Cancel Booking
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -169,8 +169,76 @@ const MyBookingsPage = () => {
           })}
         </div>
       )}
+
+      {/* 6. Add the Modal component to the page */}
+      <Modal show={showCancelModal} onHide={handleCloseModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Cancellation</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>Are you sure you want to cancel this booking?</Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseModal}>
+            Back
+          </Button>
+          <Button variant="danger" onClick={handleConfirmCancel}>
+            Yes, Cancel Booking
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
+};
+
+// --- STYLES ---
+const styles = {
+  pageContainer: {
+    maxWidth: "800px",
+    margin: "2rem auto",
+    padding: "0 1rem",
+  },
+  pageTitle: {
+    marginBottom: "2rem",
+    textAlign: "center",
+    fontWeight: "700",
+    color: "#212529",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#6c757d",
+    fontSize: "1.1rem",
+  },
+  card: {
+    background: "white",
+    borderRadius: "12px",
+    padding: "1.5rem",
+    marginBottom: "1.5rem",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+    border: "1px solid #e9ecef",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "1rem",
+    paddingBottom: "1rem",
+    borderBottom: "1px solid #e9ecef",
+  },
+  turfName: {
+    margin: 0,
+    fontSize: "1.5rem",
+    fontWeight: "600",
+  },
+  cardBody: {
+    color: "#495057",
+    fontSize: "1rem",
+    lineHeight: "1.6",
+  },
+  cardFooter: {
+    marginTop: "1.5rem",
+    borderTop: "1px solid #e5e7eb",
+    paddingTop: "1rem",
+    textAlign: "right",
+  },
 };
 
 export default MyBookingsPage;
