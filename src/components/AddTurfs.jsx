@@ -68,6 +68,14 @@ const AddTurfs = () => {
     }
   };
 
+  // --- NEW: Function to handle removing a photo ---
+  const handleRemovePhoto = (indexToRemove) => {
+    // The existing useEffect will automatically update the previews
+    setPhotos((prevPhotos) =>
+      prevPhotos.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
   const toggleDay = (dayId) => {
     setSelectedDays((prev) =>
       prev.includes(dayId)
@@ -293,15 +301,24 @@ const AddTurfs = () => {
               )}
             </div>
 
+            {/* --- MODIFIED: Photo preview section --- */}
             {photoPreviews.length > 0 && (
               <div style={styles.previewContainer}>
                 {photoPreviews.map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Preview ${i + 1}`}
-                    style={styles.previewImage}
-                  />
+                  <div key={i} style={styles.previewImageContainer}>
+                    <img
+                      src={src}
+                      alt={`Preview ${i + 1}`}
+                      style={styles.previewImage}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(i)}
+                      style={styles.removePhotoButton}
+                    >
+                      &times;
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -463,15 +480,41 @@ const styles = {
   previewContainer: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "0.5rem",
+    gap: "0.75rem", // Increased gap slightly
     marginTop: "1.25rem",
   },
-  previewImage: {
+  // --- NEW: Styles for the remove button and its container ---
+  previewImageContainer: {
+    position: "relative",
     width: "70px",
     height: "70px",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
     borderRadius: "8px",
     objectFit: "cover",
     border: "2px solid #e2e8f0",
+  },
+  removePhotoButton: {
+    position: "absolute",
+    top: "-5px",
+    right: "-5px",
+    width: "22px",
+    height: "22px",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    color: "white",
+    border: "2px solid white",
+    borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+    padding: 0,
+    fontSize: "14px",
+    fontWeight: "bold",
+    transition: "background-color 0.2s, transform 0.2s",
   },
   submitButton: {
     width: "100%",

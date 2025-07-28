@@ -18,6 +18,7 @@ const UpdateTurf = () => {
   const [photos, setPhotos] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [existingPhotos, setExistingPhotos] = useState([]);
+  const [existingPhotoPreviews, setExistingPhotoPreviews] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +63,6 @@ const UpdateTurf = () => {
           turfId
         );
 
-        // Verify the user owns this turf
         if (turf.ownerId !== user?.$id) {
           navigate("/");
           return;
@@ -75,24 +75,28 @@ const UpdateTurf = () => {
           phone: turf.ownerPhone,
         });
 
-        // Parse slot configuration
         const slotConfig = JSON.parse(turf.slotConfiguration || "[]");
-        const days = slotConfig.map((day) => day.dayOfWeek);
-        const slots = slotConfig.length > 0 ? slotConfig[0].hours : [];
+        setSelectedDays(slotConfig.map((d) => d.dayOfWeek));
+        setSelectedSlots(slotConfig.length > 0 ? slotConfig[0].hours : []);
 
-        setSelectedDays(days);
-        setSelectedSlots(slots);
+        const photoIds = turf.photoIds || [];
+        setExistingPhotos(photoIds);
 
-        // Handle existing photos
-        setExistingPhotos(turf.photoIds || []);
-        setIsLoading(false);
+        if (photoIds.length > 0) {
+          const previews = await Promise.all(
+            photoIds.map(async (id) => {
+              const url = storage.getFileView(TURF_IMAGES_BUCKET_ID, id);
+              return { id, url };
+            })
+          );
+          setExistingPhotoPreviews(previews);
+        }
       } catch (error) {
         console.error("Error fetching turf:", error);
-        setMessage({
-          text: "Failed to load turf data. Please try again.",
-          type: "error",
-        });
+        setMessage({ text: "Failed to load turf data.", type: "error" });
         navigate("/admin/dashboard");
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -106,9 +110,9 @@ const UpdateTurf = () => {
       setPhotoPreviews([]);
       return;
     }
-    const objectUrls = photos.map((file) => URL.createObjectURL(file));
-    setPhotoPreviews(objectUrls);
-    return () => objectUrls.forEach(URL.revokeObjectURL);
+    const newObjectUrls = photos.map((file) => URL.createObjectURL(file));
+    setPhotoPreviews(newObjectUrls);
+    return () => newObjectUrls.forEach(URL.revokeObjectURL);
   }, [photos]);
 
   const handleChange = (e) => {
@@ -143,40 +147,49 @@ const UpdateTurf = () => {
     }));
   };
 
-  const handleDeletePhoto = (photoId) => {
+  const handleDeleteExistingPhoto = (photoId) => {
     setPhotosToDelete((prev) => [...prev, photoId]);
     setExistingPhotos((prev) => prev.filter((id) => id !== photoId));
+    setExistingPhotoPreviews((prev) => prev.filter((p) => p.id !== photoId));
+  };
+
+  const handleRemoveNewPhoto = (indexToRemove) => {
+    setPhotos((prevPhotos) =>
+      prevPhotos.filter((_, index) => index !== indexToRemove)
+    );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ text: "", type: "" });
     setIsSubmitting(true);
+    setMessage({ text: "", type: "" });
 
     try {
-      // Delete photos marked for removal
-      const deletePromises = photosToDelete.map((photoId) =>
-        storage.deleteFile(TURF_IMAGES_BUCKET_ID, photoId)
+      const deletePromises = photosToDelete.map((id) =>
+        storage.deleteFile(TURF_IMAGES_BUCKET_ID, id)
       );
       await Promise.all(deletePromises);
 
-      // Upload new photos
-      let photoIds = [...existingPhotos];
+      let newPhotoIds = [];
       if (photos.length > 0) {
         const uploadPromises = photos.map((file) =>
-          storage.createFile(TURF_IMAGES_BUCKET_ID, AppwriteID.unique(), file)
+          storage.createFile(TURF_IMAGES_BUCKET_ID, AppwriteID.unique(), file, [
+            Permission.read(Role.user(user.$id)),
+            Permission.update(Role.user(user.$id)),
+            Permission.delete(Role.user(user.$id)),
+          ])
         );
         const uploadResults = await Promise.all(uploadPromises);
-        photoIds = [...photoIds, ...uploadResults.map((res) => res.$id)];
+        newPhotoIds = uploadResults.map((res) => res.$id);
       }
 
-      // Update turf document
+      const finalPhotoIds = [...existingPhotos, ...newPhotoIds];
       const updatedTurfData = {
         name: formData.name,
         location: formData.location,
         pricePerHour: Number(formData.price),
         ownerPhone: formData.phone,
-        photoIds,
+        photoIds: finalPhotoIds,
         slotConfiguration: JSON.stringify(prepareSlotData()),
       };
 
@@ -192,7 +205,7 @@ const UpdateTurf = () => {
     } catch (err) {
       console.error("Error updating turf:", err);
       setMessage({
-        text: `❌ ${err.message || "Failed to update turf. Please try again."}`,
+        text: `❌ ${err.message || "Failed to update."}`,
         type: "error",
       });
     } finally {
@@ -303,7 +316,6 @@ const UpdateTurf = () => {
               ))}
             </div>
           </div>
-
           <div style={styles.section}>
             <h3 style={styles.sectionHeader}>Available Time Slots</h3>
             <div style={styles.slotsContainer}>
@@ -327,23 +339,27 @@ const UpdateTurf = () => {
 
           <div style={styles.section}>
             <h3 style={styles.sectionHeader}>Turf Photos</h3>
-            {existingPhotos.length > 0 && (
+
+            {existingPhotoPreviews.length > 0 && (
               <div style={styles.existingPhotosContainer}>
                 <h4 style={styles.existingPhotosTitle}>Current Photos</h4>
                 <div style={styles.previewContainer}>
-                  {existingPhotos.map((photoId) => (
-                    <div key={photoId} style={styles.photoContainer}>
-                      <img
-                        src={storage.getFilePreview(
-                          TURF_IMAGES_BUCKET_ID,
-                          photoId
-                        )}
-                        alt={`Turf Preview`}
-                        style={styles.previewImage}
-                      />
+                  {existingPhotoPreviews.map((photo) => (
+                    <div key={photo.id} style={styles.photoContainer}>
+                      <div style={styles.imageWrapper}>
+                        <img
+                          src={photo.url}
+                          alt="Turf Preview"
+                          style={styles.previewImage}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "https://via.placeholder.com/150";
+                          }}
+                        />
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handleDeletePhoto(photoId)}
+                        onClick={() => handleDeleteExistingPhoto(photo.id)}
                         style={styles.deletePhotoButton}
                       >
                         ×
@@ -353,13 +369,40 @@ const UpdateTurf = () => {
                 </div>
               </div>
             )}
+
+            {photoPreviews.length > 0 && (
+              <div style={styles.existingPhotosContainer}>
+                <h4 style={styles.existingPhotosTitle}>New Photos to Add</h4>
+                <div style={styles.previewContainer}>
+                  {photoPreviews.map((src, i) => (
+                    <div key={i} style={styles.photoContainer}>
+                      <div style={styles.imageWrapper}>
+                        <img
+                          src={src}
+                          alt={`New Preview ${i + 1}`}
+                          style={styles.previewImage}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveNewPhoto(i)}
+                        style={styles.deletePhotoButton}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={styles.inputGroup}>
               <label htmlFor="photo-upload" style={styles.fileInputLabel}>
                 <span style={styles.fileInputIcon}>📷</span>
                 <span>Add More Photos</span>
                 <span style={styles.fileInputSubtext}>
                   {photos.length > 0
-                    ? `${photos.length} file(s) selected`
+                    ? `${photos.length} new file(s) selected`
                     : "Select new photos to upload"}
                 </span>
               </label>
@@ -372,19 +415,6 @@ const UpdateTurf = () => {
                 style={{ display: "none" }}
               />
             </div>
-
-            {photoPreviews.length > 0 && (
-              <div style={styles.previewContainer}>
-                {photoPreviews.map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Preview ${i + 1}`}
-                    style={styles.previewImage}
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
           <button
@@ -400,7 +430,6 @@ const UpdateTurf = () => {
   );
 };
 
-// Styles (similar to AddTurf with some additions)
 const styles = {
   loadingContainer: {
     display: "flex",
@@ -409,10 +438,7 @@ const styles = {
     height: "100vh",
     fontSize: "1.2rem",
   },
-  pageContainer: {
-    padding: "0.5rem",
-    minHeight: "100vh",
-  },
+  pageContainer: { padding: "0.5rem", minHeight: "100vh" },
   formContainer: {
     padding: "clamp(1rem, 4vw, 1.5rem)",
     backgroundColor: "#ffffff",
@@ -442,14 +468,8 @@ const styles = {
     fontSize: "0.95rem",
     fontWeight: "500",
   },
-  messageError: {
-    color: "#991b1b",
-    backgroundColor: "#fef2f2",
-  },
-  messageSuccess: {
-    color: "#14532d",
-    backgroundColor: "#f0fdf4",
-  },
+  messageError: { color: "#991b1b", backgroundColor: "#fef2f2" },
+  messageSuccess: { color: "#14532d", backgroundColor: "#f0fdf4" },
   responsiveGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -467,10 +487,7 @@ const styles = {
     marginBottom: "0.75rem",
     color: "#334155",
   },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-  },
+  inputGroup: { display: "flex", flexDirection: "column" },
   inputLabel: {
     marginBottom: "0.25rem",
     fontWeight: "500",
@@ -509,9 +526,7 @@ const styles = {
     fontWeight: "500",
     fontSize: "0.85rem",
   },
-  slotButton: {
-    fontSize: "0.8rem",
-  },
+  slotButton: { fontSize: "0.8rem" },
   choiceButtonActive: {
     backgroundColor: "#16a34a",
     color: "white",
@@ -530,54 +545,59 @@ const styles = {
     textAlign: "center",
     cursor: "pointer",
     color: "#475569",
+    marginTop: "1rem",
   },
-  fileInputIcon: {
-    fontSize: "1.6rem",
-  },
-  fileInputSubtext: {
-    fontSize: "0.8rem",
-    color: "#94a3b8",
-  },
-  existingPhotosContainer: {
-    marginBottom: "1.5rem",
-  },
+  fileInputIcon: { fontSize: "1.6rem" },
+  fileInputSubtext: { fontSize: "0.8rem", color: "#94a3b8" },
+  existingPhotosContainer: { marginBottom: "1.5rem" },
   existingPhotosTitle: {
     fontSize: "0.95rem",
-    color: "#64748b",
-    marginBottom: "0.5rem",
+    color: "#334155",
+    fontWeight: "600",
+    marginBottom: "0.75rem",
   },
   previewContainer: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "0.5rem",
+    gap: "1rem",
     marginTop: "0.5rem",
   },
   photoContainer: {
     position: "relative",
+    width: "150px",
+    height: "150px",
+  },
+  imageWrapper: {
+    width: "100%",
+    height: "100%",
+    overflow: "hidden",
+    borderRadius: "8px",
+    border: "2px solid #e2e8f0",
   },
   previewImage: {
-    width: "70px",
-    height: "70px",
-    borderRadius: "8px",
+    width: "100%",
+    height: "100%",
     objectFit: "cover",
-    border: "2px solid #e2e8f0",
   },
   deletePhotoButton: {
     position: "absolute",
-    top: "-8px",
-    right: "-8px",
-    background: "#ef4444",
+    top: "-5px",
+    right: "-5px",
+    width: "22px",
+    height: "22px",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
     color: "white",
-    border: "none",
+    border: "2px solid white",
     borderRadius: "50%",
-    width: "24px",
-    height: "24px",
+    cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    cursor: "pointer",
+    lineHeight: 1,
+    padding: 0,
     fontSize: "14px",
     fontWeight: "bold",
+    transition: "background-color 0.2s, transform 0.2s",
   },
   submitButton: {
     width: "100%",
