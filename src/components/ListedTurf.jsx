@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+// Import Modal and Button from react-bootstrap
+import { Modal, Button } from "react-bootstrap";
 import {
   databases,
   APPWRITE_DATABASE_ID,
@@ -14,6 +16,10 @@ const ListedTurfs = () => {
   const [myTurfs, setMyTurfs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // State to manage the bootstrap modal
+  const [showModal, setShowModal] = useState(false);
+  const [turfToDelist, setTurfToDelist] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -37,18 +43,29 @@ const ListedTurfs = () => {
     }
   };
 
-  const handleDelistTurf = async (turfId) => {
-    if (!window.confirm("Are you sure you want to delist this turf?")) return;
+  // This function now just OPENS the modal
+  const handleDelistClick = (turfId) => {
+    setTurfToDelist(turfId); // Remember which turf to delete
+    setShowModal(true); // Open the modal
+  };
+
+  // This function handles the ACTUAL deletion logic
+  const confirmDelist = async () => {
+    if (!turfToDelist) return;
     try {
       await databases.deleteDocument(
         APPWRITE_DATABASE_ID,
         TURFS_COLLECTION_ID,
-        turfId
+        turfToDelist
       );
-      setMyTurfs((prev) => prev.filter((turf) => turf.$id !== turfId));
+      setMyTurfs((prev) => prev.filter((turf) => turf.$id !== turfToDelist));
     } catch (err) {
       console.error("Error delisting turf:", err);
       setError("Failed to delist turf. Please try again.");
+    } finally {
+      // Close the modal and reset state
+      setShowModal(false);
+      setTurfToDelist(null);
     }
   };
 
@@ -61,54 +78,77 @@ const ListedTurfs = () => {
   };
 
   return (
-    <div style={styles.pageContainer}>
-      <h2 style={styles.sectionTitle}>Your Listed Turfs</h2>
-      {error && <p style={styles.errorText}>{error}</p>}
-      {loading ? (
-        <p style={styles.loadingText}>Loading your turfs...</p>
-      ) : myTurfs.length === 0 ? (
-        <p style={styles.emptyStateText}>You have not listed any turfs yet.</p>
-      ) : (
-        <div style={styles.turfsContainer}>
-          {myTurfs.map((turf) => (
-            <div key={turf.$id} style={styles.turfCard}>
-              <div style={styles.turfInfo}>
-                <h4 style={styles.turfName}>{turf.name}</h4>
-                <p style={styles.turfDetail}>
-                  {turf.location} - ₹{turf.pricePerHour}/hour
-                </p>
-                <p style={styles.turfDetail}>Contact: {turf.ownerPhone}</p>
-              </div>
-              <div style={styles.buttonGroup}>
-                <button
-                  style={styles.viewButton}
-                  onClick={() => handleViewTurf(turf.$id)}
-                >
-                  View
-                </button>
-                <button
-                  style={styles.updateButton}
-                  onClick={() => handleUpdateTurf(turf.$id)}
-                >
-                  Update
-                </button>
-                {isAdmin && (
+    <>
+      <div style={styles.pageContainer}>
+        <h2 style={styles.sectionTitle}>Your Listed Turfs</h2>
+        {error && <p style={styles.errorText}>{error}</p>}
+        {loading ? (
+          <p style={styles.loadingText}>Loading your turfs...</p>
+        ) : myTurfs.length === 0 ? (
+          <p style={styles.emptyStateText}>
+            You have not listed any turfs yet.
+          </p>
+        ) : (
+          <div style={styles.turfsContainer}>
+            {myTurfs.map((turf) => (
+              <div key={turf.$id} style={styles.turfCard}>
+                <div style={styles.turfInfo}>
+                  <h4 style={styles.turfName}>{turf.name}</h4>
+                  <p style={styles.turfDetail}>
+                    {turf.location} - ₹{turf.pricePerHour}/hour
+                  </p>
+                  <p style={styles.turfDetail}>Contact: {turf.ownerPhone}</p>
+                </div>
+                <div style={styles.buttonGroup}>
                   <button
-                    style={styles.delistButton}
-                    onClick={() => handleDelistTurf(turf.$id)}
+                    style={styles.viewButton}
+                    onClick={() => handleViewTurf(turf.$id)}
                   >
-                    Delist
+                    View
                   </button>
-                )}
+                  <button
+                    style={styles.updateButton}
+                    onClick={() => handleUpdateTurf(turf.$id)}
+                  >
+                    Update
+                  </button>
+                  {isAdmin && (
+                    <button
+                      style={styles.delistButton}
+                      onClick={() => handleDelistClick(turf.$id)}
+                    >
+                      Delist
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Delist Confirmation Modal from react-bootstrap */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Delist</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Are you sure you want to permanently delist this turf?
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={confirmDelist}>
+            Delist
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </>
   );
 };
 
+// ... (your existing styles object remains the same) ...
 const styles = {
   pageContainer: {
     padding: "1rem",
