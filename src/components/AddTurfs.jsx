@@ -341,7 +341,6 @@ const AddTurfs = () => {
 
 const styles = {
   pageContainer: {
-    padding: "0.5rem",
     minHeight: "100vh",
   },
   formContainer: {
