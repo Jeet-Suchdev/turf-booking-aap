@@ -5,6 +5,7 @@ const conf = {
   TURFS_COLLECTION_ID: String(import.meta.env.VITE_TURFS_COLLECTION_ID),
   BOOKINGS_COLLECTION_ID: String(import.meta.env.VITE_BOOKINGS_COLLECTION_ID),
   TURF_IMAGES_BUCKET_ID: String(import.meta.env.VITE_TURF_IMAGES_BUCKET_ID),
+  RAZORPAY_KEY: String(import.meta.env.VITE_RAZORPAY_KEY),
 };
 
 export default conf;

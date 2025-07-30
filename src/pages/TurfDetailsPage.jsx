@@ -13,9 +13,21 @@ import { useAuth } from "../hooks/useAuth";
 import { Query } from "appwrite";
 import ImageCarousel from "../components/ImageCarousel";
 import DatePicker from "react-datepicker";
+import conf from "../../conf/conf";
 
 // You must have this CSS import in your main App.js or index.js
 // import "react-datepicker/dist/react-datepicker.css";
+
+// A helper function to dynamically load the Razorpay script
+const loadScript = (src) => {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const isToday = (someDate) => {
   const today = new Date();
@@ -101,47 +113,104 @@ const TurfDetailsPage = () => {
       });
       return;
     }
-    setBookingStatus({ type: "loading", message: "Requesting booking..." });
-    const bookingPromises = selectedSlots.map((slot) => {
-      const startTime = new Date(slot);
-      const bookingData = {
-        userId: user.$id,
-        userName: user.name,
-        turfId: turf.$id,
-        turfName: turf.name,
-        startTime: startTime.toISOString(),
-        endTime: new Date(startTime.getTime() + 60 * 60 * 1000).toISOString(),
-        totalPrice: turf.pricePerHour,
-        status: "pending",
-        userNumber: user?.prefs?.phone || "",
-      };
-      return databases.createDocument(
-        APPWRITE_DATABASE_ID,
-        BOOKINGS_COLLECTION_ID,
-        AppwriteID.unique(),
-        bookingData
-      );
-    });
-    try {
-      await Promise.all(bookingPromises);
-      setBookingStatus({
-        type: "success",
-        message: `${selectedSlots.length} booking request(s) sent successfully!`,
-      });
-      setSelectedSlots([]);
-      const bookingsResponse = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        BOOKINGS_COLLECTION_ID,
-        [Query.equal("turfId", id)]
-      );
-      setBookings(bookingsResponse.documents);
-    } catch (error) {
-      console.error("Booking failed:", error);
+
+    setBookingStatus({ type: "loading", message: "Initializing payment..." });
+
+    const isScriptLoaded = await loadScript(
+      "https://checkout.razorpay.com/v1/checkout.js"
+    );
+
+    if (!isScriptLoaded) {
       setBookingStatus({
         type: "error",
-        message: `Booking failed: ${error.message}`,
+        message:
+          "Payment gateway failed to load. Please check your connection.",
       });
+      return;
     }
+
+    const totalPrice = turf.pricePerHour * selectedSlots.length;
+    const advanceAmount = totalPrice / 2;
+
+    const options = {
+      key: conf.RAZORPAY_KEY,
+      amount: advanceAmount * 100,
+      currency: "INR",
+      name: "Turf Booking (Advance)",
+      description: `Advance payment for ${turf.name}`,
+      image: photoUrls.length > 0 ? photoUrls[0].href : "/logo.png",
+      handler: async function (response) {
+        setBookingStatus({
+          type: "loading",
+          message: "Payment successful! Saving booking request...",
+        });
+
+        try {
+          const bookingPromises = selectedSlots.map((slot) => {
+            const startTime = new Date(slot);
+            const bookingData = {
+              turfId: turf.$id,
+              userId: user.$id,
+              startTime: startTime.toISOString(),
+              endTime: new Date(
+                startTime.getTime() + 60 * 60 * 1000
+              ).toISOString(),
+              totalPrice: turf.pricePerHour,
+              status: "pending",
+              userName: user.name,
+              turfName: turf.name,
+              userNumber: user?.prefs?.phone || "",
+              paymentId: response.razorpay_payment_id,
+            };
+
+            return databases.createDocument(
+              APPWRITE_DATABASE_ID,
+              BOOKINGS_COLLECTION_ID,
+              AppwriteID.unique(),
+              bookingData
+            );
+          });
+
+          await Promise.all(bookingPromises);
+
+          setBookingStatus({
+            type: "success",
+            message: "Booking request sent successfully!",
+          });
+
+          setSelectedSlots([]);
+          const bookingsResponse = await databases.listDocuments(
+            APPWRITE_DATABASE_ID,
+            BOOKINGS_COLLECTION_ID,
+            [Query.equal("turfId", id)]
+          );
+          setBookings(bookingsResponse.documents);
+        } catch (error) {
+          console.error("Failed to save booking after payment:", error);
+          setBookingStatus({
+            type: "error",
+            message: `Payment was successful, but saving booking failed. Contact support with Payment ID: ${response.razorpay_payment_id}`,
+          });
+        }
+      },
+      prefill: {
+        name: user.name,
+        email: user.email,
+        contact: user?.prefs?.phone || "",
+      },
+      theme: {
+        color: "#2a9d8f",
+      },
+    };
+
+    const paymentObject = new window.Razorpay(options);
+    paymentObject.on("payment.failed", function (response) {
+      setBookingStatus({
+        type: "error",
+        message: `Payment failed: ${response.error.description}`,
+      });
+    });
+    paymentObject.open();
   };
 
   const generateSlotsForDate = (date) => {
@@ -154,14 +223,17 @@ const TurfDetailsPage = () => {
       const dayOfWeek = targetDate.getDay();
       const dayConfig = config.find((c) => c.dayOfWeek === dayOfWeek);
       if (!dayConfig || !Array.isArray(dayConfig.hours)) return [];
+
+      const bookedTimeSlots = bookings
+        .filter((b) => b.status === "approved" || b.status === "pending")
+        .map((t) => new Date(t.startTime).getTime());
+
       return dayConfig.hours.map((hour) => {
         const slotTime = new Date(targetDate);
         slotTime.setHours(hour, 0, 0, 0);
         const isPast = slotTime < now;
-        const isBooked = bookings.some((b) => {
-          if (b.status !== "approved") return false;
-          return new Date(b.startTime).getTime() === slotTime.getTime();
-        });
+        const isBooked = bookedTimeSlots.includes(slotTime.getTime());
+
         return { time: slotTime.toISOString(), isPast, isBooked };
       });
     } catch (err) {
@@ -208,6 +280,7 @@ const TurfDetailsPage = () => {
     );
 
   const totalPrice = turf.pricePerHour * selectedSlots.length;
+  const advanceAmount = totalPrice / 2;
 
   return (
     <div style={styles.pageContainer}>
@@ -303,11 +376,19 @@ const TurfDetailsPage = () => {
           )}
         </div>
 
+        {/* --- UI TEXT CHANGES ARE HERE --- */}
         {selectedSlots.length > 0 && (
-          <div style={{ marginTop: "1.5rem" }}>
+          <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
             <button onClick={handleBooking} style={styles.bookNowButton}>
-              {`Book ${selectedSlots.length} Slot(s) for ₹${totalPrice}`}
+              Pay Advance ₹{advanceAmount}
             </button>
+            <p style={styles.advanceMessage}>
+              {`Pay Advance & Confirm Booking`}
+              <br />
+              {`Advance: ₹${advanceAmount}`}
+              <br />
+              {`Total: ₹${totalPrice}`}
+            </p>
           </div>
         )}
 
@@ -361,13 +442,13 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "0.5rem", // FIX: Reduced gap
+    gap: "0.5rem",
     marginBottom: "1.5rem",
   },
   dateButton: {
-    padding: "0.5rem", // FIX: Reduced padding
-    width: "40px", // FIX: Set fixed width
-    height: "40px", // FIX: Set fixed height
+    padding: "0.5rem",
+    width: "40px",
+    height: "40px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -384,11 +465,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     gap: "0.75rem",
-    fontSize: "1.1rem", // FIX: Slightly reduced base font size
+    fontSize: "1.1rem",
     fontWeight: "600",
     textAlign: "center",
     flexGrow: 1,
-    whiteSpace: "nowrap", // Prevent date text itself from wrapping
+    whiteSpace: "nowrap",
   },
   calendarIcon: { cursor: "pointer", fontSize: "1.5rem", lineHeight: 1 },
   slotsGrid: {
@@ -429,6 +510,11 @@ const styles = {
     fontWeight: "bold",
     cursor: "pointer",
     width: "100%",
+  },
+  advanceMessage: {
+    fontSize: "1rem",
+    color: "#6c757d",
+    marginTop: "0.5rem",
   },
   statusMessage: { marginTop: "1rem", fontWeight: "500", textAlign: "center" },
 };
